@@ -158,8 +158,9 @@ class DaRnnModel(nn.Module):
         return c, beta
 
     def init_hidden(self, batch_size):
-        h_init = torch.zeros(1, batch_size, self.m)
-        c_init = torch.zeros(1, batch_size, self.m)
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        h_init = torch.zeros(1, batch_size, self.m).to(device)
+        c_init = torch.zeros(1, batch_size, self.m).to(device)
 
         return (h_init, c_init)
 
@@ -175,8 +176,8 @@ class TransformerModel(nn.Module):
         self.output_dim = output_dim  # 2
         self.hidden_size = 128
         self.dropout = nn.Dropout(dropout_p)
-        self.encoder_layer = nn.TransformerEncoderLayer(d_model=input_dim, nhead=5)
-        self.transformer_encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=2)
+        self.encoder_layer = nn.TransformerEncoderLayer(d_model=input_dim, nhead=4)
+        self.transformer_encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=6)
         self.fnn = nn.Linear(input_dim, output_dim)
 
     def forward(self, input_seq, hidden_state):

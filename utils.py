@@ -88,7 +88,58 @@ def select_trigram(trigram_idx_strings, predict_column_index, limit = 8):
     return parsed_trigram_idxs, time_list
 
 
-def read_dataset_with_pos(path, data_path, limit=0, concat=False):
+def read_dataset_with_pos_add(path, data_path, limit=0, concat=False):
+    """
+    Reads the data set from given path, expecting it to contain a 'y' column with
+    the label and each year in its own column containing a number of trigram indexes.
+    Limit sets the maximum number of examples to read, zero meaning no limit.
+    If concat is true each of the trigrams in a year is concatenated, if false
+    they are instead summed elementwise.
+    """
+    # subtype_flag, data_path = make_dataset.subtype_selection(subtype)
+    _, trigram_vecs_data = make_dataset.read_trigram_vecs(data_path)
+
+    df = pd.read_csv(path)
+
+    labels = df['Label'].values
+    position_strings = [i.split('|')[1] for i in df['Position'].values]
+
+    position_indices = np.array(list(map(int, position_strings)))
+    trigram_idx_strings = df.iloc[:,
+                          3:].values  # field: Position,predict_date,Label,2019-12, ... so start from third one
+    predict_date_columns = df['predict_date'].values  # Assuming 'predict_date' is the same across the DataFrame
+    predict_column_index = [df.columns.get_loc(pred_date[:-3]) - 3 for pred_date in predict_date_columns]
+    parsed_trigram_idxs, time_list = select_trigram(trigram_idx_strings, predict_column_index, limit=8)
+    # parsed_trigram_idxs = [[None if pd.isna(x) else ast.literal_eval(x) for x in example] for example in trigram_idx_strings]
+    # print(parsed_trigram_idxs)
+    trigram_vecs = np.array(build_features.map_idxs_to_vecs(parsed_trigram_idxs, trigram_vecs_data))
+    if concat:
+        trigram_vecs = np.reshape(trigram_vecs, [len(df.columns) - 1, len(df.index), -1])
+    else:
+        # Sum trigram vecs instead of concatenating them
+        trigram_vecs = np.sum(trigram_vecs, axis=2)
+
+    B, T, embedding_dim = trigram_vecs.shape
+    # position embedding
+    num_positions = 1274  # max position len is 1273
+    num_timestamps = len(trigram_idx_strings[0])  # currently is 28
+    # position embedding
+    position_embedding = nn.Embedding(num_embeddings=num_positions, embedding_dim=embedding_dim)
+    position_embeddings = position_embedding(torch.tensor(position_indices)).detach().numpy()
+    position_embeddings = np.expand_dims(position_embeddings, axis=1)
+
+    # time embedding
+    time_embedding = nn.Embedding(num_embeddings=num_timestamps, embedding_dim=embedding_dim)
+    time_embeddings = time_embedding(torch.tensor(time_list)).detach().numpy()
+
+    # Combine position embeddings with trigram vectors
+    trigram_vecs += position_embeddings + time_embeddings
+
+    trigram_vecs = trigram_vecs.transpose(1, 0, 2)
+
+    return trigram_vecs, labels
+
+def read_dataset_with_pos_cat(path, data_path, limit=0, concat=False):
     """
     Reads the data set from given path, expecting it to contain a 'y' column with
     the label and each year in its own column containing a number of trigram indexes.
@@ -120,18 +171,25 @@ def read_dataset_with_pos(path, data_path, limit=0, concat=False):
 
     B,T,embedding_dim = trigram_vecs.shape
     # position embedding
-    num_positions = max(position_indices) + 1  # Assume positions are sequential and start at 0
-    position_embedding = nn.Embedding(num_embeddings=num_positions, embedding_dim=embedding_dim)
+    num_positions = 1274  # max position len is 1273
+    num_timestamps = len(trigram_idx_strings[0]) # currently is 28
+    position_embedding_dim = 50  # Fixed to 50 dimensions
+    time_embedding_dim = 50  # Fixed to 30 dimensions
+    # position embedding
+    position_embedding = nn.Embedding(num_embeddings=num_positions, embedding_dim=position_embedding_dim)
     position_embeddings = position_embedding(torch.tensor(position_indices)).detach().numpy()
     position_embeddings = np.expand_dims(position_embeddings, axis=1)
 
     # time embedding
-    num_timestamps = len(trigram_idx_strings[0])
-    time_embedding = nn.Embedding(num_embeddings=num_timestamps, embedding_dim=embedding_dim)
+    time_embedding = nn.Embedding(num_embeddings=num_timestamps, embedding_dim=time_embedding_dim)
     time_embeddings = time_embedding(torch.tensor(time_list)).detach().numpy()
 
+   # Concatenate embeddings
+    position_embeddings = np.repeat(position_embeddings, T, axis=1)  # Expand position embeddings to (B, T, 50)
+    trigram_vecs = np.concatenate([trigram_vecs, position_embeddings, time_embeddings], axis=-1)  # Shape: (B, T, embedding_dim + 50 + 20)
+
     # Combine position embeddings with trigram vectors
-    trigram_vecs += position_embeddings + time_embeddings
+    # trigram_vecs += position_embeddings + time_embeddings
 
     trigram_vecs = trigram_vecs.transpose(1, 0, 2)
 

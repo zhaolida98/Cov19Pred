@@ -296,8 +296,10 @@ def train_rnn(model, verify, epochs, learning_rate, batch_size, X, Y, X_test, Y_
             print('V_loss %.3f\tV_acc %.3f\tV_pre %.3f\tV_rec %.3f\tV_fscore %.3f\tV_mcc %.3f' % (
             val_loss, val_acc, precision, recall, fscore, mcc))
     # plot_training_history(all_losses, all_val_losses, all_accs, all_val_accs, all_fscores, all_val_fscores)
-    print('Best results: %d \n V_loss %.3f\tV_acc %.3f\tV_pre %.3f\tV_rec %.3f\tV_fscore %.3f\tV_mcc %.3f' % (
-        best_epoch_index, best_val_loss, best_val_acc, best_val_pre, best_val_rec, best_val_fscore, best_val_mcc))
+    bst = 'Best results: %d \t V_loss %.3f\tV_acc %.3f\tV_pre %.3f\tV_rec %.3f\tV_fscore %.3f\tV_mcc %.3f' % (
+        best_epoch_index, best_val_loss, best_val_acc, best_val_pre, best_val_rec, best_val_fscore, best_val_mcc)
+    print(bst)
+    return bst
     # roc curve
     # if epoch + 1 == 50:
     #   tpr_rnn, fpr_rnn, _ = roc_curve(Y_test, pred_prob)
