@@ -147,7 +147,7 @@ def train_rnn(model, verify, epochs, learning_rate, batch_size, X, Y, X_test, Y_
     batch_size decides how many examples are in each mini batch.
     show_attention decides if attention weights are plotted.
     """
-    print_interval = 10
+    print_interval = epochs//10
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     criterion = torch.nn.CrossEntropyLoss()
@@ -295,7 +295,7 @@ def train_rnn(model, verify, epochs, learning_rate, batch_size, X, Y, X_test, Y_
             epoch_loss, epoch_acc, epoch_pre, epoch_rec, epoch_fscore, epoch_mcc))
             print('V_loss %.3f\tV_acc %.3f\tV_pre %.3f\tV_rec %.3f\tV_fscore %.3f\tV_mcc %.3f' % (
             val_loss, val_acc, precision, recall, fscore, mcc))
-    plot_training_history(all_losses, all_val_losses, all_accs, all_val_accs, all_fscores, all_val_fscores)
+    # plot_training_history(all_losses, all_val_losses, all_accs, all_val_accs, all_fscores, all_val_fscores)
     print('Best results: %d \n V_loss %.3f\tV_acc %.3f\tV_pre %.3f\tV_rec %.3f\tV_fscore %.3f\tV_mcc %.3f' % (
         best_epoch_index, best_val_loss, best_val_acc, best_val_pre, best_val_rec, best_val_fscore, best_val_mcc))
     # roc curve

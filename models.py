@@ -35,15 +35,16 @@ class RnnModel(nn.Module):
         return score_seq, dummy_attn_weights  # No attention weights
 
     def init_hidden(self, batch_size):
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         if self.cell_type == 'LSTM':
-            h_init = torch.zeros(1, batch_size, self.hidden_size)
-            c_init = torch.zeros(1, batch_size, self.hidden_size)
+            h_init = torch.zeros(1, batch_size, self.hidden_size).to(device)
+            c_init = torch.zeros(1, batch_size, self.hidden_size).to(device)
 
             return (h_init, c_init)
         elif self.cell_type == 'GRU':
-            return torch.zeros(1, batch_size, self.hidden_size)
+            return torch.zeros(1, batch_size, self.hidden_size).to(device)
         elif self.cell_type == 'RNN':
-            return torch.zeros(1, batch_size, self.hidden_size)
+            return torch.zeros(1, batch_size, self.hidden_size).to(device)
 
 
 class AttentionModel(nn.Module):
@@ -191,6 +192,112 @@ class TransformerModel(nn.Module):
     def init_hidden(self, batch_size):
         h_init = torch.zeros(1, batch_size, self.hidden_size)
         c_init = torch.zeros(1, batch_size, self.hidden_size)
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        h_init = h_init.to(device)
+        c_init = c_init.to(device)
+        return (h_init, c_init)
+
+class PosTrans(nn.Module):
+    class Head(nn.Module):
+        def __init__(self, n_embed, head_size, dropout):
+            super().__init__()
+            self.key = nn.Linear(n_embed, head_size)
+            self.query = nn.Linear(n_embed, head_size)
+            self.value = nn.Linear(n_embed, head_size)
+            self.dropout = nn.Dropout(dropout)
+
+        def forward(self, idx):
+            B, T, C = idx.shape
+            k = self.key(idx)  # (B, T, C)
+            q = self.query(idx)  # (B, T, C)
+            weight = q @ k.transpose(-2, -1) / (C ** 0.5)  # (B, T, T)
+            device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+            tril = torch.tril(torch.ones(T, T)).to(device)
+            weight = weight.masked_fill(tril == 0, float('-inf'))
+            weight = F.softmax(weight, dim=-1)
+            weight = self.dropout(weight)
+            v = self.value(idx)  # (B, T, C)
+            out = weight @ v  # (B, T, C)
+            return out
+
+    class MultiHead(nn.Module):
+        def __init__(self, n_embed, head_size, head_num, dropout):
+            super().__init__()
+            self.heads = nn.ModuleList(
+                [PosTrans.Head(n_embed, head_size, dropout) for _ in range(head_num)]
+            )
+            self.proj = nn.Linear(n_embed, n_embed)
+            self.dropout = nn.Dropout(dropout)
+
+        def forward(self, x):
+            out = torch.cat([h(x) for h in self.heads], dim=-1)
+            out = self.proj(out)
+            out = self.dropout(out)
+            return out
+
+    class Block(nn.Module):
+        def __init__(self, n_embed, head_num, head_size, dropout):
+            super().__init__()
+            self.sa = PosTrans.MultiHead(n_embed, head_size, head_num, dropout)
+            self.ffw = PosTrans.FFwd(n_embed, dropout)
+            self.ln1 = nn.LayerNorm(n_embed)
+            self.ln2 = nn.LayerNorm(n_embed)
+
+        def forward(self, x):
+            x = x + self.sa(self.ln1(x))
+            x = x + self.ffw(self.ln2(x))
+            return x
+
+    class FFwd(nn.Module):
+        def __init__(self, n_embed, dropout):
+            super().__init__()
+            self.seq = nn.Sequential(
+                nn.Linear(n_embed, 4 * n_embed),
+                nn.GELU(),
+                nn.Linear(4 * n_embed, n_embed),
+                nn.Dropout(dropout),
+            )
+
+        def forward(self, x):
+            return self.seq(x)
+
+    def __init__(self, input_dim, output_dim, dropout, head_num=4, n_layer=6):
+        super().__init__()
+        self.n_embed = input_dim
+        self.output_dim = output_dim
+        self.dropout = dropout
+        self.head_size = self.n_embed // head_num
+        self.blocks = nn.Sequential(
+            *[
+                PosTrans.Block(
+                    n_embed=self.n_embed,
+                    head_num=head_num,
+                    head_size=self.head_size,
+                    dropout=self.dropout,
+                )
+                for _ in range(n_layer)
+            ]
+        )
+        self.ln_f = nn.LayerNorm(self.n_embed)
+        self.ffwd = PosTrans.FFwd(self.n_embed, self.dropout)
+        self.lm_head = nn.Linear(self.n_embed, self.output_dim)
+
+    def forward(self, idx, hidden, targets=None):
+        x = self.blocks(idx)  # (B, T, n_embed)
+        x = self.ln_f(x)
+        x = self.ffwd(x)
+        logits = self.lm_head(x)  # (B, T, vocab_size)
+        logits = logits[-1, :, :]  # Get the last token's prediction
+        logits = logits.squeeze(-1)
+        if targets is not None:
+            loss = F.binary_cross_entropy_with_logits(logits, targets.float())
+        else:
+            loss = None
+        return logits, loss
+
+    def init_hidden(self, batch_size):
+        h_init = torch.zeros(1, batch_size, self.n_embed)
+        c_init = torch.zeros(1, batch_size, self.n_embed)
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         h_init = h_init.to(device)
         c_init = c_init.to(device)

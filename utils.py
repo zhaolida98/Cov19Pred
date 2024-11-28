@@ -6,6 +6,8 @@ import make_dataset
 import build_features
 # from src.data import cluster
 import random
+from torch import nn
+import torch
 
 
 def read_and_process_to_trigram_vecs(data_files, subtype, sample_size=100, test_split=0.0, squeeze=True,
@@ -64,6 +66,78 @@ def cluster_years(strains_by_year, data_path, method='DBSCAN'):
     clusters_by_year = cluster.cluster_raw(encoded_strains, method)
     strains_by_year, clusters_by_year = cluster.remove_outliers(strains_by_year, clusters_by_year)
     return strains_by_year, clusters_by_year
+
+
+def select_trigram(trigram_idx_strings, predict_column_index, limit = 8):
+    parsed_trigram_idxs = []
+    time_list = []
+    for example, predict_pos in zip(trigram_idx_strings, predict_column_index):
+        cnt = 0
+        new_example = []
+        timestamps = []
+        for idx in range(predict_pos)[::-1]:
+            if cnt >= 8:
+                break
+            e = example[idx]
+            if not pd.isna(e):
+                cnt += 1
+                new_example.append(ast.literal_eval(e))
+                timestamps.append(idx)
+        parsed_trigram_idxs.append(new_example)
+        time_list.append(timestamps[::-1])
+    return parsed_trigram_idxs, time_list
+
+
+def read_dataset_with_pos(path, data_path, limit=0, concat=False):
+    """
+    Reads the data set from given path, expecting it to contain a 'y' column with
+    the label and each year in its own column containing a number of trigram indexes.
+    Limit sets the maximum number of examples to read, zero meaning no limit.
+    If concat is true each of the trigrams in a year is concatenated, if false
+    they are instead summed elementwise.
+    """
+    # subtype_flag, data_path = make_dataset.subtype_selection(subtype)
+    _, trigram_vecs_data = make_dataset.read_trigram_vecs(data_path)
+
+    df = pd.read_csv(path)
+
+    labels = df['Label'].values
+    position_strings = [i.split('|')[1] for i in df['Position'].values]
+    
+    position_indices = np.array(list(map(int, position_strings)))
+    trigram_idx_strings = df.iloc[:, 3:].values # field: Position,predict_date,Label,2019-12, ... so start from third one
+    predict_date_columns = df['predict_date'].values  # Assuming 'predict_date' is the same across the DataFrame
+    predict_column_index = [df.columns.get_loc(pred_date[:-3]) - 3 for pred_date in predict_date_columns]
+    parsed_trigram_idxs, time_list = select_trigram(trigram_idx_strings, predict_column_index,limit=8)
+    # parsed_trigram_idxs = [[None if pd.isna(x) else ast.literal_eval(x) for x in example] for example in trigram_idx_strings]
+    # print(parsed_trigram_idxs)
+    trigram_vecs = np.array(build_features.map_idxs_to_vecs(parsed_trigram_idxs, trigram_vecs_data))
+    if concat:
+        trigram_vecs = np.reshape(trigram_vecs, [len(df.columns) - 1, len(df.index), -1])
+    else:
+        # Sum trigram vecs instead of concatenating them
+        trigram_vecs = np.sum(trigram_vecs, axis=2)
+
+    B,T,embedding_dim = trigram_vecs.shape
+    # position embedding
+    num_positions = max(position_indices) + 1  # Assume positions are sequential and start at 0
+    position_embedding = nn.Embedding(num_embeddings=num_positions, embedding_dim=embedding_dim)
+    position_embeddings = position_embedding(torch.tensor(position_indices)).detach().numpy()
+    position_embeddings = np.expand_dims(position_embeddings, axis=1)
+
+    # time embedding
+    num_timestamps = len(trigram_idx_strings[0])
+    time_embedding = nn.Embedding(num_embeddings=num_timestamps, embedding_dim=embedding_dim)
+    time_embeddings = time_embedding(torch.tensor(time_list)).detach().numpy()
+
+    # Combine position embeddings with trigram vectors
+    trigram_vecs += position_embeddings + time_embeddings
+
+    trigram_vecs = trigram_vecs.transpose(1, 0, 2)
+
+
+    return trigram_vecs, labels
+    
 
 
 def read_dataset(path, data_path, limit=0, concat=False):

@@ -25,10 +25,10 @@ def main():
         data_set = '/home/zh/codes/transformer_virus/data/processed/H5N1/triplet_cluster'
 
     elif subtype_flag == 3:
-        data_path = '/home/zh/codes/transformer_virus/data/processed/COV19/'
-        data_set = '/home/zh/codes/transformer_virus/data/processed/COV19/triplet_cluster'
-        # data_path = '/home/zh/codes/rnn_virus_source_code/data/processed/COV19/'
-        # data_set = '/home/zh/codes/rnn_virus_source_code/data/processed/COV19/triplet_cluster'
+        # data_path = 'C:\\Users\\86969\\Documents\\Code\\Cov19Pred\\data\\TempoOriginData\\processed\\COV19\\'
+        # data_set = 'C:\\Users\\86969\\Documents\\Code\\Cov19Pred\\data\\TempoOriginData\\processed\\COV19\\triplet_cluster'
+        data_path = 'C:\\Users\\86969\\Documents\\Code\\Cov19Pred\\data\\TempoOriginData\\processed\\COV19\\'
+        data_set = 'C:\\Users\\86969\\Documents\\Code\\Cov19Pred\\data\\ESM_Tempo\\mydata_3gram\\sample2204_timeslot_month_3gram\\sample2204_3gram_monthv2_label'
 
     parameters = {
 
@@ -47,8 +47,11 @@ def main():
         # Droprate (applied at input)
         'dropout_p': 0.0001,
 
+        # Droprate (applied at weights)
+        'dropout_w': 0.2,
+
         # Note, no learning rate decay implemented
-        'learning_rate': 0.001,
+        'learning_rate': 3e-4,
 
         # Size of mini batch
         'batch_size': 256,
@@ -60,9 +63,14 @@ def main():
     torch.manual_seed(1)
     np.random.seed(1)
 
-    train_trigram_vecs, train_labels = utils.read_dataset(parameters['data_set'] + '_train.csv',
+    # train_trigram_vecs, train_labels = utils.read_dataset(parameters['data_set'] + '_train.csv',
+    #                                                       parameters['data_path'], concat=False)
+    # test_trigram_vecs, test_labels = utils.read_dataset(parameters['data_set'] + '_test.csv',
+    #                                                     parameters['data_path'], concat=False)
+
+    train_trigram_vecs, train_labels = utils.read_dataset_with_pos(parameters['data_set'] + '_train.csv',
                                                           parameters['data_path'], concat=False)
-    test_trigram_vecs, test_labels = utils.read_dataset(parameters['data_set'] + '_test.csv',
+    test_trigram_vecs, test_labels = utils.read_dataset_with_pos(parameters['data_set'] + '_test.csv',
                                                         parameters['data_path'], concat=False)
 
     X_train = torch.tensor(train_trigram_vecs, dtype=torch.float32)
@@ -119,6 +127,8 @@ def main():
                                     parameters['dropout_p'])
         elif parameters['model'] == 'transformer':
             net = models.TransformerModel(100, 2, parameters['dropout_p'])
+        elif parameters['model'] == 'postrans':
+            net = models.PosTrans(100, 2, parameters['dropout_w'], head_num=4, n_layer=4)
 
         # use gpu
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -128,7 +138,6 @@ def main():
         X_test = X_test.to(device)
         Y_test = Y_test.to(device)
         # use gpu
-
         train_model.train_rnn(net, False, parameters['num_of_epochs'], parameters['learning_rate'],
                               parameters['batch_size'], X_train, Y_train, X_test, Y_test, True, parameters['model'])
 
@@ -138,17 +147,20 @@ if __name__ == '__main__':
     subtype = ['H1N1', 'H3N2', 'H5N1', 'COV19']
     subtype_flag = make_dataset.subtype_selection(subtype[3])
 
-    # model = ['gru', 'lstm', 'attention', 'rnn', 'svm', 'logistic regression']
+    model = ['attention', 'rnn', 'svm', 'logistic regression', 'random forest', 'postrans']
     # model = ['svm', 'logistic regression', 'transformer']
     # model = ['logistic regression','random forest','rnn','lstm']
-    model = ['transformer']
+    # model = ['postrans']
     # model = ['attention', 'gru', 'lstm', 'rnn','logistic regression']
     # model = ['logistic regression', 'random forest', 'rnn']
     # model = ['rnn']
     for model in model:
-        print('\n')
-        print("Experimental results with model %s on subtype_flag %s:" % (model, subtype_flag))
-        main()
+        try:
+            print('\n')
+            print("Experimental results with model %s on subtype_flag %s:" % (model, subtype_flag))
+            main()
+        except:
+            pass
 
 
 

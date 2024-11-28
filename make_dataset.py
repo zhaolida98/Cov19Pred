@@ -20,14 +20,13 @@ def subtype_selection(subtype):
     return subtype_flag
 
 
-def read_trigram_vecs(subtype):
+def read_trigram_vecs(data_path):
     """
     Reads the csv file containing 100 dimensional prot vecs, the
     data_path argument indicating where it is located.
     Returns a dictionary that maps a 3gram of amino acids to its
     index and a numpy array containing the trigram vecs.
     """
-    data_path = '/home/zh/codes/rnn_virus_source_code/data/raw/H1N1_cluster/'
     prot_vec_file = 'protVec_100d_3grams.csv'
 
     df = pd.read_csv(data_path + prot_vec_file, delimiter='\t')
