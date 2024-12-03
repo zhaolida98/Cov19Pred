@@ -170,13 +170,13 @@ class TransformerModel(nn.Module):
     A temporal attention model using an Transformer encoder.
     """
 
-    def __init__(self, input_dim, output_dim, dropout_p):
+    def __init__(self, input_dim, output_dim, dropout_p, nhead=5):
         super(TransformerModel, self).__init__()
         self.input_dim = input_dim  # 100
         self.output_dim = output_dim  # 2
         self.hidden_size = 128
         self.dropout = nn.Dropout(dropout_p)
-        self.encoder_layer = nn.TransformerEncoderLayer(d_model=input_dim, nhead=4)
+        self.encoder_layer = nn.TransformerEncoderLayer(d_model=input_dim, nhead=nhead)
         self.transformer_encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=6)
         self.fnn = nn.Linear(input_dim, output_dim)
 

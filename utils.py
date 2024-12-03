@@ -67,24 +67,43 @@ def cluster_years(strains_by_year, data_path, method='DBSCAN'):
     strains_by_year, clusters_by_year = cluster.remove_outliers(strains_by_year, clusters_by_year)
     return strains_by_year, clusters_by_year
 
-
-def select_trigram(trigram_idx_strings, predict_column_index, limit = 8):
+def select_trigram_expand_data(trigram_idx_strings, labels, position_indices, limit = 5):
     parsed_trigram_idxs = []
     time_list = []
-    for example, predict_pos in zip(trigram_idx_strings, predict_column_index):
+    expand_pos = []
+    new_labels = []
+    for example, pos, lab in zip(trigram_idx_strings, position_indices, labels):
         cnt = 0
         new_example = []
         timestamps = []
-        for idx in range(predict_pos)[::-1]:
-            if cnt >= 8:
-                break
-            e = example[idx]
+        for idx, e in enumerate(example):
             if not pd.isna(e):
-                cnt += 1
                 new_example.append(ast.literal_eval(e))
                 timestamps.append(idx)
-        parsed_trigram_idxs.append(new_example)
-        time_list.append(timestamps[::-1])
+        for i in range(len(new_example) - limit):
+            if i == len(new_example) - limit - 1:
+                new_labels.append(lab)
+            else:
+                new_labels.append(1 if new_example[i+limit-1] == new_example[i+limit] else 0)
+            parsed_trigram_idxs.append(new_example[i:i+limit])
+            time_list.append(timestamps[i:i+limit])
+            expand_pos.append(pos)
+    return parsed_trigram_idxs, new_labels, time_list, expand_pos
+
+
+def select_trigram(trigram_idx_strings,  limit):
+    parsed_trigram_idxs = []
+    time_list = []
+    for example in trigram_idx_strings:
+        cnt = 0
+        new_example = []
+        timestamps = []
+        for idx, e in enumerate(example):
+            if not pd.isna(e):
+                new_example.append(ast.literal_eval(e))
+                timestamps.append(idx)
+        parsed_trigram_idxs.append(new_example[-limit:])
+        time_list.append(timestamps[-limit:])
     return parsed_trigram_idxs, time_list
 
 
@@ -108,8 +127,7 @@ def read_dataset_with_pos_add(path, data_path, limit=0, concat=False):
     trigram_idx_strings = df.iloc[:,
                           3:].values  # field: Position,predict_date,Label,2019-12, ... so start from third one
     predict_date_columns = df['predict_date'].values  # Assuming 'predict_date' is the same across the DataFrame
-    predict_column_index = [df.columns.get_loc(pred_date[:-3]) - 3 for pred_date in predict_date_columns]
-    parsed_trigram_idxs, time_list = select_trigram(trigram_idx_strings, predict_column_index, limit=8)
+    parsed_trigram_idxs, time_list = select_trigram(trigram_idx_strings, limit=5)
     # parsed_trigram_idxs = [[None if pd.isna(x) else ast.literal_eval(x) for x in example] for example in trigram_idx_strings]
     # print(parsed_trigram_idxs)
     trigram_vecs = np.array(build_features.map_idxs_to_vecs(parsed_trigram_idxs, trigram_vecs_data))
@@ -139,7 +157,7 @@ def read_dataset_with_pos_add(path, data_path, limit=0, concat=False):
 
     return trigram_vecs, labels
 
-def read_dataset_with_pos_cat(path, data_path, limit=0, concat=False):
+def read_dataset_with_pos_cat(path, data_path, concat=False):
     """
     Reads the data set from given path, expecting it to contain a 'y' column with
     the label and each year in its own column containing a number of trigram indexes.
@@ -158,8 +176,7 @@ def read_dataset_with_pos_cat(path, data_path, limit=0, concat=False):
     position_indices = np.array(list(map(int, position_strings)))
     trigram_idx_strings = df.iloc[:, 3:].values # field: Position,predict_date,Label,2019-12, ... so start from third one
     predict_date_columns = df['predict_date'].values  # Assuming 'predict_date' is the same across the DataFrame
-    predict_column_index = [df.columns.get_loc(pred_date[:-3]) - 3 for pred_date in predict_date_columns]
-    parsed_trigram_idxs, time_list = select_trigram(trigram_idx_strings, predict_column_index,limit=8)
+    parsed_trigram_idxs, time_list = select_trigram(trigram_idx_strings, limit=5)
     # parsed_trigram_idxs = [[None if pd.isna(x) else ast.literal_eval(x) for x in example] for example in trigram_idx_strings]
     # print(parsed_trigram_idxs)
     trigram_vecs = np.array(build_features.map_idxs_to_vecs(parsed_trigram_idxs, trigram_vecs_data))
@@ -173,23 +190,34 @@ def read_dataset_with_pos_cat(path, data_path, limit=0, concat=False):
     # position embedding
     num_positions = 1274  # max position len is 1273
     num_timestamps = len(trigram_idx_strings[0]) # currently is 28
-    position_embedding_dim = 50  # Fixed to 50 dimensions
-    time_embedding_dim = 50  # Fixed to 30 dimensions
+    position_embedding_dim = 2  # Fixed to 50 dimensions
+    time_embedding_dim = 2  # Fixed to 30 dimensions
     # position embedding
     position_embedding = nn.Embedding(num_embeddings=num_positions, embedding_dim=position_embedding_dim)
     position_embeddings = position_embedding(torch.tensor(position_indices)).detach().numpy()
     position_embeddings = np.expand_dims(position_embeddings, axis=1)
 
-    # time embedding
-    time_embedding = nn.Embedding(num_embeddings=num_timestamps, embedding_dim=time_embedding_dim)
-    time_embeddings = time_embedding(torch.tensor(time_list)).detach().numpy()
+    # sequential time embedding
+    # time_embedding = nn.Embedding(num_embeddings=num_timestamps, embedding_dim=time_embedding_dim)
+    # time_embeddings = time_embedding(torch.tensor(time_list)).detach().numpy()
 
-   # Concatenate embeddings
-    position_embeddings = np.repeat(position_embeddings, T, axis=1)  # Expand position embeddings to (B, T, 50)
-    trigram_vecs = np.concatenate([trigram_vecs, position_embeddings, time_embeddings], axis=-1)  # Shape: (B, T, embedding_dim + 50 + 20)
+    # cyclical time encodings
+    max_time = 4  # Period of the cycle (e.g., 12 for months in a year)
+    sin_encoding = np.sin(2 * np.pi * np.array(time_list) / max_time)
+    cos_encoding = np.cos(2 * np.pi * np.array(time_list) / max_time)
+    # from sklearn.preprocessing import MinMaxScaler
+    # scaler = MinMaxScaler(feature_range=(-1, 1))  # Optional scaling
+    # sin_encoding = scaler.fit_transform(sin_encoding)
+    # cos_encoding = scaler.fit_transform(cos_encoding)
+    time_embeddings = np.stack([sin_encoding, cos_encoding], axis=-1)
+    # expanded_time_embeddings = np.tile(time_embeddings, (1, embedding_dim // 2))
 
-    # Combine position embeddings with trigram vectors
-    # trigram_vecs += position_embeddings + time_embeddings
+    # Concatenate embeddings
+    # position_embeddings = np.repeat(position_embeddings, T, axis=1)  # Expand position embeddings to (B, T, 50)
+    # trigram_vecs = np.concatenate([trigram_vecs, position_embeddings, time_embeddings], axis=-1)  # Shape: (B, T, embedding_dim + 50 + 20)
+    trigram_vecs = np.concatenate([trigram_vecs, time_embeddings], axis=-1)  # Shape: (B, T, embedding_dim + 50 + 20)
+
+    # trigram_vecs += expanded_time_embeddings
 
     trigram_vecs = trigram_vecs.transpose(1, 0, 2)
 

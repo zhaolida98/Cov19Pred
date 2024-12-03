@@ -11,7 +11,7 @@ import numpy as np
 from sklearn.preprocessing import LabelEncoder
 
 
-def main(isletter=False):
+def main(isletter=True):
     if subtype_flag == 0:
         # data_path = '/home/zh/codes/rnn_virus_source_code/data/raw/H1N1_cluster/'
         # data_set = '/home/zh/codes/rnn_virus_source_code/data/processed/H1N1/triplet_cluster'
@@ -30,10 +30,10 @@ def main(isletter=False):
         # data_set = 'C:\\Users\\86969\\Documents\\Code\\Cov19Pred\\data\\TempoOriginData\\processed\\COV19\\triplet_cluster'
         if isletter:
             data_path = 'C:\\Users\\86969\\Documents\\Code\\Cov19Pred\\data\\TempoOriginData\\processed\\COV19\\'
-            data_set = 'C:\\Users\\86969\\Documents\\Code\\Cov19Pred\\data\\ESM_Tempo\\mydata_3gram\\sample2204_timeslot_month_3gram\\sample2204_3gram_monthv2_letter'
+            data_set = 'C:\\Users\\86969\\Documents\\Code\\Cov19Pred\\data\\ESM_Tempo\\mydata_3gram\\sample2204_timeslot_month_3gram\\3grams_season_letter'
         else:
             data_path = 'C:\\Users\\86969\\Documents\\Code\\Cov19Pred\\data\\TempoOriginData\\processed\\COV19\\'
-            data_set = 'C:\\Users\\86969\\Documents\\Code\\Cov19Pred\\data\\ESM_Tempo\\mydata_3gram\\sample2204_timeslot_month_3gram\\sample2204_3gram_monthv2_label'
+            data_set = 'C:\\Users\\86969\\Documents\\Code\\Cov19Pred\\data\\ESM_Tempo\\mydata_3gram\\sample2204_timeslot_month_3gram\\3grams_season_letter'
     parameters = {
 
         # Exlude _train/_test and file ending
@@ -72,16 +72,16 @@ def main(isletter=False):
     # test_trigram_vecs, test_labels = utils.read_dataset(parameters['data_set'] + '_test.csv',
     #                                                     parameters['data_path'], concat=False)
 
-    train_trigram_vecs, train_labels = utils.read_dataset_with_pos_add(parameters['data_set'] + '_train.csv',
-                                                          parameters['data_path'], concat=False)
-    test_trigram_vecs, test_labels = utils.read_dataset_with_pos_add(parameters['data_set'] + '_test.csv',
-                                                        parameters['data_path'], concat=False)
+    # train_trigram_vecs, train_labels = utils.read_dataset_with_pos_add(parameters['data_set'] + '_train.csv',
+    #                                                       parameters['data_path'], concat=False)
+    # test_trigram_vecs, test_labels = utils.read_dataset_with_pos_add(parameters['data_set'] + '_test.csv',
+    #                                                     parameters['data_path'], concat=False)
 
     # cat 就用下面这个。然后函数里面可以调整pos和time的维度，176 177 行。现在默认50维
-    # train_trigram_vecs, train_labels = utils.read_dataset_with_pos_cat(parameters['data_set'] + '_train.csv',
-    #                                                                    parameters['data_path'], concat=False)
-    # test_trigram_vecs, test_labels = utils.read_dataset_with_pos_cat(parameters['data_set'] + '_test.csv',
-    #                                                                  parameters['data_path'], concat=False)
+    train_trigram_vecs, train_labels = utils.read_dataset_with_pos_cat(parameters['data_set'] + '_train.csv',
+                                                                       parameters['data_path'], concat=False)
+    test_trigram_vecs, test_labels = utils.read_dataset_with_pos_cat(parameters['data_set'] + '_test.csv',
+                                                                     parameters['data_path'], concat=False)
 
 
 
@@ -146,9 +146,9 @@ def main(isletter=False):
             net = models.DaRnnModel(seq_length, input_dim, output_dim, parameters['hidden_size'],
                                     parameters['dropout_p'])
         elif parameters['model'] == 'transformer':
-            net = models.TransformerModel(input_dim, output_dim, parameters['dropout_p'])
+            net = models.TransformerModel(input_dim, output_dim, parameters['dropout_p'],nhead=5)
         elif parameters['model'] == 'postrans':
-            net = models.PosTrans(input_dim, output_dim, parameters['dropout_w'], head_num=4, n_layer=4)
+            net = models.PosTrans(input_dim, output_dim, parameters['dropout_w'], head_num=2, n_layer=4)
 
         # use gpu
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -172,12 +172,12 @@ if __name__ == '__main__':
     subtype_flag = make_dataset.subtype_selection(subtype[3])
 
     # model = ['svm', 'logistic regression', 'random forest', 'gru', 'lstm', 'attention', 'rnn', 'da-rnn', 'transformer', 'postrans']
-    # model = ['svm', 'logistic regression', 'transformer']
+    # model = ['svm', 'logistic regression', 'random forest']
     # model = ['logistic regression','random forest','rnn','lstm']
     model = ['transformer', 'postrans']
     # model = [ 'gru', 'lstm', 'attention', 'rnn', 'da-rnn', 'transformer', 'postrans']
     # model = ['logistic regression', 'random forest', 'rnn']
-    # model = ['transformer']
+    # model = ['random forest']
     res = {}
     for model in model:
         try:
