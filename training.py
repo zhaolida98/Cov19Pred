@@ -10,8 +10,7 @@ import torch
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
 
-
-def main(isletter=True):
+def get_train_test_data(isletter=True):
     if subtype_flag == 0:
         # data_path = '/home/zh/codes/rnn_virus_source_code/data/raw/H1N1_cluster/'
         # data_set = '/home/zh/codes/rnn_virus_source_code/data/processed/H1N1/triplet_cluster'
@@ -38,35 +37,7 @@ def main(isletter=True):
         isletter = True
         data_set = "C:\\Users\\86969\\Documents\\Code\\Cov19Pred\\data\\ESM_Tempo\\mydata_1280\\esm1v1_season_letter"
         data_path = ""
-    parameters = {
 
-        # Exlude _train/_test and file ending
-        'data_set': data_set,
-
-        # raw data path
-        'data_path': data_path,
-
-        # 'svm', lstm', 'gru', 'attention' (only temporal) or 'da-rnn' (input and temporal attention)
-        'model': model,
-
-        # Number of hidden units in the encoder
-        'hidden_size': 512,
-
-        # Droprate (applied at input)
-        'dropout_p': 0.0001,
-
-        # Droprate (applied at weights)
-        'dropout_w': 0.2,
-
-        # Note, no learning rate decay implemented
-        'learning_rate': 3e-4,
-
-        # Size of mini batch
-        'batch_size': 256,
-
-        # Number of training iterations
-        'num_of_epochs': 100
-    }
 
     torch.manual_seed(1)
     np.random.seed(1)
@@ -87,10 +58,10 @@ def main(isletter=True):
     # test_trigram_vecs, test_labels = utils.read_dataset_with_pos_cat(parameters['data_set'] + '_test.csv',
     #                                                                  parameters['data_path'], concat=False)
     # train_trigram_vecs, train_labels = utils.read_data_esm(parameters['data_set'] + '_train.csv', parameters['data_path'], concat=False)
-    # train_trigram_vecs, train_labels = utils.read_data_esm_add(parameters['data_set'] + '_test.csv')
-    # test_trigram_vecs, test_labels = utils.read_data_esm_add(parameters['data_set'] + '_test.csv')
-    train_trigram_vecs, train_labels = utils.read_data_esm_cat(parameters['data_set'] + '_train.csv')
-    test_trigram_vecs, test_labels = utils.read_data_esm_cat(parameters['data_set'] + '_test.csv')
+    train_trigram_vecs, train_labels = utils.read_data_esm_add(data_set + '_train.csv')
+    test_trigram_vecs, test_labels = utils.read_data_esm_add(data_set + '_test.csv')
+    # train_trigram_vecs, train_labels = utils.read_data_esm_cat(data_set + '_train.csv')
+    # test_trigram_vecs, test_labels = utils.read_data_esm_cat(data_set + '_test.csv')
     if isletter:
         # 将 train 和 test 标签合并在一起进行编码
         all_labels =np.concatenate([train_labels, test_labels])
@@ -116,22 +87,53 @@ def main(isletter=True):
     print('Class imbalances:')
     print(' Training %.3f' % train_imbalance)
     print(' Testing  %.3f' % test_imbalance)
+    return X_train, Y_train, X_test, Y_test
 
+def main(X_train, X_test, Y_train, Y_test, isletter=True):
+    parameters = {
+
+        # Exlude _train/_test and file ending
+        # 'data_set': data_set,
+
+        # raw data path
+        # 'data_path': data_path,
+
+        # 'svm', lstm', 'gru', 'attention' (only temporal) or 'da-rnn' (input and temporal attention)
+        'model': model,
+
+        # Number of hidden units in the encoder
+        'hidden_size': 512,
+
+        # Droprate (applied at input)
+        'dropout_p': 0.0001,
+
+        # Droprate (applied at weights)
+        'dropout_w': 0.2,
+
+        # Note, no learning rate decay implemented
+        'learning_rate': 3e-4,
+
+        # Size of mini batch
+        'batch_size': 256,
+
+        # Number of training iterations
+        'num_of_epochs': 100
+    }
     if parameters['model'] == 'svm':
         window_size = 1
         train_model.svm_baseline(
-            build_features.reshape_to_linear(train_trigram_vecs, window_size=window_size), train_labels,
-            build_features.reshape_to_linear(test_trigram_vecs, window_size=window_size), test_labels)
+            build_features.reshape_to_linear(X_train, window_size=window_size), Y_train,
+            build_features.reshape_to_linear(X_test, window_size=window_size), Y_test)
     elif parameters['model'] == 'random forest':
         window_size = 1
         train_model.random_forest_baseline(
-            build_features.reshape_to_linear(train_trigram_vecs, window_size=window_size), train_labels,
-            build_features.reshape_to_linear(test_trigram_vecs, window_size=window_size), test_labels)
+            build_features.reshape_to_linear(X_train, window_size=window_size), Y_train,
+            build_features.reshape_to_linear(X_test, window_size=window_size), Y_test)
     elif parameters['model'] == 'logistic regression':
         window_size = 1
         train_model.logistic_regression_baseline(
-            build_features.reshape_to_linear(train_trigram_vecs, window_size=window_size), train_labels,
-            build_features.reshape_to_linear(test_trigram_vecs, window_size=window_size), test_labels)
+            build_features.reshape_to_linear(X_train, window_size=window_size), Y_train,
+            build_features.reshape_to_linear(X_test, window_size=window_size), Y_test)
     else:
         input_dim = X_train.shape[2]
         seq_length = X_train.shape[0]
@@ -185,11 +187,12 @@ if __name__ == '__main__':
     # model = ['logistic regression', 'random forest', 'rnn']
     # model = ['random forest']
     res = {}
+    X_train, X_test, Y_train, Y_test = get_train_test_data(isletter=True)
     for model in model:
         try:
             print('\n')
             print("Experimental results with model %s on subtype_flag %s:" % (model, subtype_flag))
-            bst_result = main()
+            bst_result = main(X_train, X_test, Y_train, Y_test, isletter=True)
             res[model] = bst_result
         except Exception as e:
             import traceback
