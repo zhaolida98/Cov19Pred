@@ -146,6 +146,7 @@ def read_data_esm_cat(path):
     position_embedding = nn.Embedding(num_embeddings=num_positions, embedding_dim=position_embedding_dim)
     position_embeddings = position_embedding(torch.tensor(position_indices)).detach().numpy()
     position_embeddings = np.expand_dims(position_embeddings, axis=1)
+    position_embeddings = np.repeat(position_embeddings, T, axis=1)  # Expand position embeddings to (B, T, 50)
 
     # time embedding
     # cyclical time encodings
@@ -160,8 +161,7 @@ def read_data_esm_cat(path):
     # expanded_time_embeddings = np.tile(time_embeddings, (1, embedding_dim // 2))
 
     # Concatenate embeddings
-    position_embeddings = np.repeat(position_embeddings, T, axis=1)  # Expand position embeddings to (B, T, 50)
-    esm_embeds_list = np.concatenate([esm_embeds_list, position_embeddings, time_embeddings], axis=-1)  # Shape: (B, T, embedding_dim + 50 + 20)
+    esm_embeds_list = np.concatenate([esm_embeds_list, time_embeddings], axis=-1)  # Shape: (B, T, embedding_dim + 50 + 20)
 
     esm_embeds_list = esm_embeds_list.transpose(1, 0, 2)
 
@@ -195,11 +195,19 @@ def read_data_esm_add(path):
     position_embeddings = np.expand_dims(position_embeddings, axis=1)
 
     # time embedding
-    time_embedding = nn.Embedding(num_embeddings=num_timestamps, embedding_dim=embedding_dim)
-    time_embeddings = time_embedding(torch.tensor(time_list)).detach().numpy()
+    # cyclical time encodings
+    max_time = 4  # Period of the cycle (e.g., 12 for months in a year)
+    sin_encoding = np.sin(2 * np.pi * np.array(time_list) / max_time)
+    cos_encoding = np.cos(2 * np.pi * np.array(time_list) / max_time)
+    from sklearn.preprocessing import MinMaxScaler
+    scaler = MinMaxScaler(feature_range=(-1, 1))  # Optional scaling
+    sin_encoding = scaler.fit_transform(sin_encoding)
+    cos_encoding = scaler.fit_transform(cos_encoding)
+    time_embeddings = np.stack([sin_encoding, cos_encoding], axis=-1)
+    time_embeddings = np.tile(time_embeddings, (1, embedding_dim // 2))
 
     # Combine position embeddings with trigram vectors
-    esm_embeds_list += position_embeddings + time_embeddings
+    esm_embeds_list += time_embeddings
 
     esm_embeds_list = esm_embeds_list.transpose(1, 0, 2)
 

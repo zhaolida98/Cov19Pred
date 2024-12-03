@@ -42,24 +42,19 @@ def get_train_test_data(isletter=True):
     torch.manual_seed(1)
     np.random.seed(1)
 
-    # train_trigram_vecs, train_labels = utils.read_dataset(parameters['data_set'] + '_train.csv',
-    #                                                       parameters['data_path'], concat=False)
-    # test_trigram_vecs, test_labels = utils.read_dataset(parameters['data_set'] + '_test.csv',
-    #                                                     parameters['data_path'], concat=False)
+    # train_trigram_vecs, train_labels = utils.read_dataset(data_set + '_train.csv', data_path, concat=False)
+    # test_trigram_vecs, test_labels = utils.read_dataset(data_set + '_test.csv', data_path, concat=False)
 
-    # train_trigram_vecs, train_labels = utils.read_dataset_with_pos_add(parameters['data_set'] + '_train.csv',
-    #                                                       parameters['data_path'], concat=False)
-    # test_trigram_vecs, test_labels = utils.read_dataset_with_pos_add(parameters['data_set'] + '_test.csv',
-    #                                                     parameters['data_path'], concat=False)
+    # train_trigram_vecs, train_labels = utils.read_dataset_with_pos_add(data_set + '_train.csv', data_path, concat=False)
+    # test_trigram_vecs, test_labels = utils.read_dataset_with_pos_add(data_set + '_test.csv', data_path, concat=False)
 
     # cat 就用下面这个。然后函数里面可以调整pos和time的维度，176 177 行。现在默认50维
-    # train_trigram_vecs, train_labels = utils.read_dataset_with_pos_cat(parameters['data_set'] + '_train.csv',
-    #                                                                    parameters['data_path'], concat=False)
-    # test_trigram_vecs, test_labels = utils.read_dataset_with_pos_cat(parameters['data_set'] + '_test.csv',
-    #                                                                  parameters['data_path'], concat=False)
-    # train_trigram_vecs, train_labels = utils.read_data_esm(parameters['data_set'] + '_train.csv', parameters['data_path'], concat=False)
+    # train_trigram_vecs, train_labels = utils.read_dataset_with_pos_cat(data_set + '_train.csv', data_path, concat=False)
+    # test_trigram_vecs, test_labels = utils.read_dataset_with_pos_cat(data_set + '_test.csv', data_path, concat=False)
+
     train_trigram_vecs, train_labels = utils.read_data_esm_add(data_set + '_train.csv')
     test_trigram_vecs, test_labels = utils.read_data_esm_add(data_set + '_test.csv')
+
     # train_trigram_vecs, train_labels = utils.read_data_esm_cat(data_set + '_train.csv')
     # test_trigram_vecs, test_labels = utils.read_data_esm_cat(data_set + '_test.csv')
     if isletter:
@@ -89,7 +84,7 @@ def get_train_test_data(isletter=True):
     print(' Testing  %.3f' % test_imbalance)
     return X_train, Y_train, X_test, Y_test
 
-def main(X_train, X_test, Y_train, Y_test, isletter=True):
+def main(X_train, Y_train, X_test, Y_test, isletter=True):
     parameters = {
 
         # Exlude _train/_test and file ending
@@ -154,7 +149,7 @@ def main(X_train, X_test, Y_train, Y_test, isletter=True):
             net = models.DaRnnModel(seq_length, input_dim, output_dim, parameters['hidden_size'],
                                     parameters['dropout_p'])
         elif parameters['model'] == 'transformer':
-            net = models.TransformerModel(input_dim, output_dim, parameters['dropout_p'],nhead=5)
+            net = models.TransformerModel(input_dim, output_dim, parameters['dropout_p'],nhead=2)
         elif parameters['model'] == 'postrans':
             net = models.PosTrans(input_dim, output_dim, parameters['dropout_w'], head_num=2, n_layer=4)
 
@@ -187,12 +182,12 @@ if __name__ == '__main__':
     # model = ['logistic regression', 'random forest', 'rnn']
     # model = ['random forest']
     res = {}
-    X_train, X_test, Y_train, Y_test = get_train_test_data(isletter=True)
+    X_train, Y_train, X_test, Y_test = get_train_test_data(isletter=True)
     for model in model:
         try:
             print('\n')
             print("Experimental results with model %s on subtype_flag %s:" % (model, subtype_flag))
-            bst_result = main(X_train, X_test, Y_train, Y_test, isletter=True)
+            bst_result = main(X_train, Y_train, X_test, Y_test, isletter=True)
             res[model] = bst_result
         except Exception as e:
             import traceback
