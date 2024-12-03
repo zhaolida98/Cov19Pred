@@ -34,6 +34,10 @@ def main(isletter=True):
         else:
             data_path = 'C:\\Users\\86969\\Documents\\Code\\Cov19Pred\\data\\TempoOriginData\\processed\\COV19\\'
             data_set = 'C:\\Users\\86969\\Documents\\Code\\Cov19Pred\\data\\ESM_Tempo\\mydata_3gram\\sample2204_timeslot_month_3gram\\3grams_season_letter'
+    elif subtype_flag == 4:
+        isletter = True
+        data_set = "C:\\Users\\86969\\Documents\\Code\\Cov19Pred\\data\\ESM_Tempo\\mydata_1280\\esm1v1_season_letter"
+        data_path = ""
     parameters = {
 
         # Exlude _train/_test and file ending
@@ -78,13 +82,15 @@ def main(isletter=True):
     #                                                     parameters['data_path'], concat=False)
 
     # cat 就用下面这个。然后函数里面可以调整pos和time的维度，176 177 行。现在默认50维
-    train_trigram_vecs, train_labels = utils.read_dataset_with_pos_cat(parameters['data_set'] + '_train.csv',
-                                                                       parameters['data_path'], concat=False)
-    test_trigram_vecs, test_labels = utils.read_dataset_with_pos_cat(parameters['data_set'] + '_test.csv',
-                                                                     parameters['data_path'], concat=False)
-
-
-
+    # train_trigram_vecs, train_labels = utils.read_dataset_with_pos_cat(parameters['data_set'] + '_train.csv',
+    #                                                                    parameters['data_path'], concat=False)
+    # test_trigram_vecs, test_labels = utils.read_dataset_with_pos_cat(parameters['data_set'] + '_test.csv',
+    #                                                                  parameters['data_path'], concat=False)
+    # train_trigram_vecs, train_labels = utils.read_data_esm(parameters['data_set'] + '_train.csv', parameters['data_path'], concat=False)
+    # train_trigram_vecs, train_labels = utils.read_data_esm_add(parameters['data_set'] + '_test.csv')
+    # test_trigram_vecs, test_labels = utils.read_data_esm_add(parameters['data_set'] + '_test.csv')
+    train_trigram_vecs, train_labels = utils.read_data_esm_cat(parameters['data_set'] + '_train.csv')
+    test_trigram_vecs, test_labels = utils.read_data_esm_cat(parameters['data_set'] + '_test.csv')
     if isletter:
         # 将 train 和 test 标签合并在一起进行编码
         all_labels =np.concatenate([train_labels, test_labels])
@@ -168,14 +174,14 @@ def main(isletter=True):
 
 
 if __name__ == '__main__':
-    subtype = ['H1N1', 'H3N2', 'H5N1', 'COV19']
-    subtype_flag = make_dataset.subtype_selection(subtype[3])
+    subtype = ['H1N1', 'H3N2', 'H5N1', 'COV19', 'COV19ESM']
+    subtype_flag = make_dataset.subtype_selection(subtype[4])
 
     # model = ['svm', 'logistic regression', 'random forest', 'gru', 'lstm', 'attention', 'rnn', 'da-rnn', 'transformer', 'postrans']
     # model = ['svm', 'logistic regression', 'random forest']
     # model = ['logistic regression','random forest','rnn','lstm']
-    model = ['transformer', 'postrans']
-    # model = [ 'gru', 'lstm', 'attention', 'rnn', 'da-rnn', 'transformer', 'postrans']
+    # model = ['transformer', 'postrans']
+    model = [ 'gru', 'lstm', 'attention', 'rnn', 'da-rnn', 'transformer', 'postrans']
     # model = ['logistic regression', 'random forest', 'rnn']
     # model = ['random forest']
     res = {}

@@ -106,6 +106,104 @@ def select_trigram(trigram_idx_strings,  limit):
         time_list.append(timestamps[-limit:])
     return parsed_trigram_idxs, time_list
 
+def select_esm_embed(esm_embeds_list,  limit):
+    parsed_trigram_idxs = []
+    time_list = []
+    for example in esm_embeds_list:
+        new_example = []
+        timestamps = []
+        for idx, e in enumerate(example):
+            if not pd.isna(e):
+                new_example.append(ast.literal_eval(e))
+                timestamps.append(idx)
+        parsed_trigram_idxs.append(new_example[-limit:])
+        time_list.append(timestamps[-limit:])
+    return np.array(parsed_trigram_idxs), np.array(time_list)
+
+def read_data_esm_cat(path):
+    """
+    Reads the data set from given path, expecting it to contain a 'y' column with
+    the label and each year in its own column containing a number of trigram indexes.
+    Limit sets the maximum number of examples to read, zero meaning no limit.
+    If concat is true each of the trigrams in a year is concatenated, if false
+    they are instead summed elementwise.
+    """
+
+    df = pd.read_csv(path)
+
+    labels = df['Label'].values
+    position_strings = [i.split('|')[1] for i in df['Position'].values]
+
+    position_indices = np.array(list(map(int, position_strings)))
+    esm_embeds_list = df.iloc[:,
+                          3:].values  # field: Position,predict_date,Label,2019-12, ... so start from third one
+    esm_embeds_list, time_list = select_esm_embed(esm_embeds_list, limit=5)
+
+    B, T, embedding_dim = esm_embeds_list.shape
+    # position embedding
+    num_positions = 1274  # max position len is 1273
+    position_embedding_dim = embedding_dim
+    position_embedding = nn.Embedding(num_embeddings=num_positions, embedding_dim=position_embedding_dim)
+    position_embeddings = position_embedding(torch.tensor(position_indices)).detach().numpy()
+    position_embeddings = np.expand_dims(position_embeddings, axis=1)
+
+    # time embedding
+    # cyclical time encodings
+    max_time = 4  # Period of the cycle (e.g., 12 for months in a year)
+    sin_encoding = np.sin(2 * np.pi * np.array(time_list) / max_time)
+    cos_encoding = np.cos(2 * np.pi * np.array(time_list) / max_time)
+    # from sklearn.preprocessing import MinMaxScaler
+    # scaler = MinMaxScaler(feature_range=(-1, 1))  # Optional scaling
+    # sin_encoding = scaler.fit_transform(sin_encoding)
+    # cos_encoding = scaler.fit_transform(cos_encoding)
+    time_embeddings = np.stack([sin_encoding, cos_encoding], axis=-1)
+    # expanded_time_embeddings = np.tile(time_embeddings, (1, embedding_dim // 2))
+
+    # Concatenate embeddings
+    position_embeddings = np.repeat(position_embeddings, T, axis=1)  # Expand position embeddings to (B, T, 50)
+    esm_embeds_list = np.concatenate([esm_embeds_list, position_embeddings, time_embeddings], axis=-1)  # Shape: (B, T, embedding_dim + 50 + 20)
+
+    esm_embeds_list = esm_embeds_list.transpose(1, 0, 2)
+
+    return esm_embeds_list, labels
+
+def read_data_esm_add(path):
+    """
+    Reads the data set from given path, expecting it to contain a 'y' column with
+    the label and each year in its own column containing a number of trigram indexes.
+    Limit sets the maximum number of examples to read, zero meaning no limit.
+    If concat is true each of the trigrams in a year is concatenated, if false
+    they are instead summed elementwise.
+    """
+
+    df = pd.read_csv(path)
+
+    labels = df['Label'].values
+    position_strings = [i.split('|')[1] for i in df['Position'].values]
+
+    position_indices = np.array(list(map(int, position_strings)))
+    esm_embeds_list = df.iloc[:,
+                          3:].values  # field: Position,predict_date,Label,2019-12, ... so start from third one
+    esm_embeds_list, time_list = select_esm_embed(esm_embeds_list, limit=5)
+
+    B, T, embedding_dim = esm_embeds_list.shape
+    # position embedding
+    num_positions = 1274  # max position len is 1273
+    num_timestamps = 10  # currently is 28
+    position_embedding = nn.Embedding(num_embeddings=num_positions, embedding_dim=embedding_dim)
+    position_embeddings = position_embedding(torch.tensor(position_indices)).detach().numpy()
+    position_embeddings = np.expand_dims(position_embeddings, axis=1)
+
+    # time embedding
+    time_embedding = nn.Embedding(num_embeddings=num_timestamps, embedding_dim=embedding_dim)
+    time_embeddings = time_embedding(torch.tensor(time_list)).detach().numpy()
+
+    # Combine position embeddings with trigram vectors
+    esm_embeds_list += position_embeddings + time_embeddings
+
+    esm_embeds_list = esm_embeds_list.transpose(1, 0, 2)
+
+    return esm_embeds_list, labels
 
 def read_dataset_with_pos_add(path, data_path, limit=0, concat=False):
     """

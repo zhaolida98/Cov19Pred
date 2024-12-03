@@ -16,6 +16,8 @@ def subtype_selection(subtype):
         # data_path = '/home/zh/codes/rnn_virus_source_code/data/raw/H5N1_cluster/'
     elif subtype == 'COV19':
         subtype_flag = 3
+    elif subtype == 'COV19ESM':
+        subtype_flag = 4
 
     return subtype_flag
 
